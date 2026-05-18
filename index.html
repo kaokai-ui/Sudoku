@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#4d72bf" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sudoku" />
+    <meta
+      name="description"
+      content="可在 PC、iPad、Android Pad 與 Android TV 使用的數獨遊戲。"
+    />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.svg" />
+    <script>
+      if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+        const manifestLink = document.createElement('link')
+        manifestLink.rel = 'manifest'
+        manifestLink.href = './site.webmanifest'
+        document.head.appendChild(manifestLink)
+      }
+    </script>
+    <title>數獨遊戲</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+  </html>
