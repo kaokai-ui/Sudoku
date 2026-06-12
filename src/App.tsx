@@ -19,7 +19,6 @@ import {
   boardToString,
   cloneBoard,
   findFirstEditableCell,
-  getCompletion,
   isBoardComplete,
   isFixedCell,
   isRelatedCell,
@@ -109,7 +108,7 @@ function App() {
   const [game, setGame] = useState<HydratedGame | null>(null)
   const [statusMessage, setStatusMessage] = useState('題庫已載入，選好模式就可以開始。')
   const boardRefs = useRef<Record<string, HTMLButtonElement | null>>({})
-  const panelRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const panelRefs = useRef<Record<string, HTMLElement | null>>({})
   const pendingFocusRef = useRef<CellPosition | null>(null)
 
   const modeConfig = MODE_CONFIGS[settings.mode]
@@ -119,7 +118,6 @@ function App() {
   const savedForSelection = savedGames[selectedSlotKey] ?? null
   const puzzlesForSelection = getPuzzles(settings.mode, selectedDifficulty)
   const keypadColumns = modeConfig.size === 4 ? 2 : 3
-  const keypadRows = Math.ceil(modeConfig.size / keypadColumns)
 
   function persistSettings(nextSettings: HomeSettings): void {
     setSettings(nextSettings)
@@ -370,7 +368,12 @@ function App() {
     }
 
     if (direction === 'right' && col === modeConfig.size - 1) {
-      focusPanelControl('tool-home')
+      focusPanelControl('digit-1')
+      return
+    }
+
+    if (direction === 'down' && row === modeConfig.size - 1) {
+      focusPanelControl('digit-1')
       return
     }
 
@@ -392,6 +395,12 @@ function App() {
     focusBoardCell(nextRow, nextCol)
   }
 
+  function focusBottomKeypadDigit(column: number): void {
+    const baseIndex = Math.max(modeConfig.size - keypadColumns, 0)
+    const targetIndex = Math.min(baseIndex + column, modeConfig.size - 1)
+    focusPanelControl(`digit-${targetIndex + 1}`)
+  }
+
   function moveKeypadFocus(currentIndex: number, direction: 'up' | 'down' | 'left' | 'right'): void {
     const row = Math.floor(currentIndex / keypadColumns)
     const col = currentIndex % keypadColumns
@@ -405,12 +414,14 @@ function App() {
     }
 
     if (direction === 'up' && row === 0) {
-      focusPanelControl('tool-hint')
+      if (game?.selectedCell) {
+        focusBoardCell(game.selectedCell.row, game.selectedCell.col)
+      }
       return
     }
 
-    if (direction === 'down' && row === keypadRows - 1) {
-      focusPanelControl(isCompleted ? 'action-next' : 'action-home')
+    if (direction === 'down' && currentIndex + keypadColumns > lastIndex) {
+      focusPanelControl(col === 0 ? 'tool-home' : col === 1 ? 'tool-erase' : 'tool-hint')
       return
     }
 
@@ -447,6 +458,18 @@ function App() {
     pendingFocusRef.current = null
     focusBoardCell(target.row, target.col)
   }, [game?.puzzleId, game?.startedAt, screen])
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+
+    const frameId = window.requestAnimationFrame(() => {
+      window.scrollTo(0, 0)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [screen])
 
   return (
     <main className="app-shell">
@@ -569,19 +592,12 @@ function App() {
       ) : (
         <section className="game-shell">
           <header className="game-header">
-            <div>
+            <div className="game-title-row">
               <span className="eyebrow">Now Playing</span>
               <h2>
-                {MODE_CONFIGS[game.mode].label} / {formatDifficultyLabel(game.difficulty)} (
-                {' '}
-                {currentPuzzleNumber} / {currentPuzzleTotal} )
+                {MODE_CONFIGS[game.mode].label.replace(/\s+/g, '')} ({currentPuzzleNumber}/
+                {currentPuzzleTotal}) {formatDifficultyLabel(game.difficulty).replace(/\s+/g, '')}
               </h2>
-              <p>
-                {game.puzzle.title} · {game.puzzle.technique}
-              </p>
-            </div>
-            <div className="header-meta">
-              <span>完成度 {getCompletion(game.boardMatrix, game.solutionMatrix)}%</span>
             </div>
           </header>
 
@@ -672,79 +688,6 @@ function App() {
             </section>
 
             <aside className="side-panel">
-              <div className="status-card">
-                <strong>{isCompleted ? '本局已完成' : '目前狀態'}</strong>
-                <span>{statusMessage}</span>
-                <span>最後儲存 {formatTimestamp(game.updatedAt)}</span>
-              </div>
-
-              <div className="tool-row">
-                <button
-                  ref={(node) => {
-                    panelRefs.current['tool-home'] = node
-                  }}
-                  type="button"
-                  className="tool-button"
-                  onClick={restartCurrentGame}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowRight') {
-                      event.preventDefault()
-                      focusPanelControl('tool-erase')
-                    } else if (event.key === 'ArrowDown') {
-                      event.preventDefault()
-                      focusPanelControl('digit-1')
-                    } else if (event.key === 'ArrowLeft' && game.selectedCell) {
-                      event.preventDefault()
-                      focusBoardCell(game.selectedCell.row, game.selectedCell.col)
-                    }
-                  }}
-                >
-                  重新遊戲
-                </button>
-                <button
-                  ref={(node) => {
-                    panelRefs.current['tool-erase'] = node
-                  }}
-                  type="button"
-                  className="tool-button"
-                  onClick={eraseValue}
-                  disabled={!canErase}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowLeft') {
-                      event.preventDefault()
-                      focusPanelControl('tool-home')
-                    } else if (event.key === 'ArrowRight') {
-                      event.preventDefault()
-                      focusPanelControl('tool-hint')
-                    } else if (event.key === 'ArrowDown') {
-                      event.preventDefault()
-                      focusPanelControl('digit-2')
-                    }
-                  }}
-                >
-                  橡皮擦
-                </button>
-                <button
-                  ref={(node) => {
-                    panelRefs.current['tool-hint'] = node
-                  }}
-                  type="button"
-                  className="tool-button"
-                  onClick={useHint}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowLeft') {
-                      event.preventDefault()
-                      focusPanelControl('tool-erase')
-                    } else if (event.key === 'ArrowDown') {
-                      event.preventDefault()
-                      focusPanelControl('digit-3')
-                    }
-                  }}
-                >
-                  提示
-                </button>
-              </div>
-
               <div
                 className="keypad"
                 style={{ gridTemplateColumns: `repeat(${keypadColumns}, minmax(0, 1fr))` }}
@@ -779,6 +722,82 @@ function App() {
                 ))}
               </div>
 
+              <div className="tool-row">
+                <button
+                  ref={(node) => {
+                    panelRefs.current['tool-home'] = node
+                  }}
+                  type="button"
+                  className="tool-button"
+                  onClick={restartCurrentGame}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowRight') {
+                      event.preventDefault()
+                      focusPanelControl('tool-erase')
+                    } else if (event.key === 'ArrowUp') {
+                      event.preventDefault()
+                      focusBottomKeypadDigit(0)
+                    } else if (event.key === 'ArrowDown') {
+                      event.preventDefault()
+                      focusPanelControl(isCompleted ? 'action-next' : 'action-home')
+                    } else if (event.key === 'ArrowLeft' && game.selectedCell) {
+                      event.preventDefault()
+                      focusBoardCell(game.selectedCell.row, game.selectedCell.col)
+                    }
+                  }}
+                >
+                  重新遊戲
+                </button>
+                <button
+                  ref={(node) => {
+                    panelRefs.current['tool-erase'] = node
+                  }}
+                  type="button"
+                  className="tool-button"
+                  onClick={eraseValue}
+                  disabled={!canErase}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowLeft') {
+                      event.preventDefault()
+                      focusPanelControl('tool-home')
+                    } else if (event.key === 'ArrowRight') {
+                      event.preventDefault()
+                      focusPanelControl('tool-hint')
+                    } else if (event.key === 'ArrowUp') {
+                      event.preventDefault()
+                      focusBottomKeypadDigit(1)
+                    } else if (event.key === 'ArrowDown') {
+                      event.preventDefault()
+                      focusPanelControl('action-home')
+                    }
+                  }}
+                >
+                  橡皮擦
+                </button>
+                <button
+                  ref={(node) => {
+                    panelRefs.current['tool-hint'] = node
+                  }}
+                  type="button"
+                  className="tool-button"
+                  onClick={useHint}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowLeft') {
+                      event.preventDefault()
+                      focusPanelControl('tool-erase')
+                    } else if (event.key === 'ArrowUp') {
+                      event.preventDefault()
+                      focusBottomKeypadDigit(2)
+                    } else if (event.key === 'ArrowDown') {
+                      event.preventDefault()
+                      focusPanelControl('action-home')
+                    }
+                  }}
+                >
+                  提示
+                </button>
+              </div>
+
               <div className="panel-actions">
                 {isCompleted ? (
                   <button
@@ -791,8 +810,8 @@ function App() {
                     onKeyDown={(event) => {
                       if (event.key === 'ArrowUp') {
                         event.preventDefault()
-                        focusPanelControl(`digit-${modeConfig.size}`)
-                      } else if (event.key === 'ArrowDown') {
+                        focusPanelControl('tool-home')
+                      } else if (event.key === 'ArrowRight') {
                         event.preventDefault()
                         focusPanelControl('action-home')
                       }
@@ -812,7 +831,10 @@ function App() {
                   onKeyDown={(event) => {
                     if (event.key === 'ArrowUp') {
                       event.preventDefault()
-                      focusPanelControl(isCompleted ? 'action-next' : `digit-${modeConfig.size}`)
+                      focusPanelControl(isCompleted ? 'action-next' : 'tool-home')
+                    } else if (event.key === 'ArrowLeft' && isCompleted) {
+                      event.preventDefault()
+                      focusPanelControl('action-next')
                     }
                   }}
                 >
