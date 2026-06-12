@@ -53,6 +53,7 @@ function hydrateSavedGame(savedGame: SavedGame): HydratedGame | null {
   const size = getModeSize(savedGame.mode)
   return {
     ...savedGame,
+    errorCount: savedGame.errorCount ?? 0,
     puzzle,
     boardMatrix: stringToBoard(savedGame.board, size),
     initialBoard: stringToBoard(puzzle.puzzle, size),
@@ -69,6 +70,7 @@ function createGame(mode: ModeKey, difficulty: DifficultyKey, puzzle: PuzzleReco
     mode,
     difficulty,
     board: puzzle.puzzle,
+    errorCount: 0,
     selectedCell: findFirstEditableCell(initialBoard),
     startedAt,
     updatedAt: startedAt,
@@ -86,6 +88,7 @@ function dehydrateGame(game: HydratedGame): SavedGame {
     mode: game.mode,
     difficulty: game.difficulty,
     board: boardToString(game.boardMatrix),
+    errorCount: game.errorCount,
     selectedCell: game.selectedCell,
     startedAt: game.startedAt,
     updatedAt: game.updatedAt,
@@ -275,12 +278,14 @@ function App() {
     const nextBoard = cloneBoard(game.boardMatrix)
     nextBoard[row][col] = value
     const completedAt = isBoardComplete(nextBoard, game.solutionMatrix) ? new Date().toISOString() : null
+    const isWrongMove = value !== game.solutionMatrix[row][col]
 
     commitGame(
       {
         ...game,
         boardMatrix: nextBoard,
         board: boardToString(nextBoard),
+        errorCount: game.errorCount + (isWrongMove ? 1 : 0),
         updatedAt: new Date().toISOString(),
         completedAt,
       },
@@ -368,12 +373,12 @@ function App() {
     }
 
     if (direction === 'right' && col === modeConfig.size - 1) {
-      focusPanelControl('digit-1')
+      focusClosestAvailableDigit(0)
       return
     }
 
     if (direction === 'down' && row === modeConfig.size - 1) {
-      focusPanelControl('digit-1')
+      focusClosestAvailableDigit(0)
       return
     }
 
@@ -395,10 +400,32 @@ function App() {
     focusBoardCell(nextRow, nextCol)
   }
 
+  function focusClosestAvailableDigit(targetIndex: number): void {
+    let closestIndex: number | null = null
+
+    for (let index = 0; index < modeConfig.size; index += 1) {
+      if (completedDigits.has(index + 1)) {
+        continue
+      }
+
+      if (
+        closestIndex === null ||
+        Math.abs(index - targetIndex) < Math.abs(closestIndex - targetIndex) ||
+        (Math.abs(index - targetIndex) === Math.abs(closestIndex - targetIndex) && index < closestIndex)
+      ) {
+        closestIndex = index
+      }
+    }
+
+    if (closestIndex !== null) {
+      focusPanelControl(`digit-${closestIndex + 1}`)
+    }
+  }
+
   function focusBottomKeypadDigit(column: number): void {
     const baseIndex = Math.max(modeConfig.size - keypadColumns, 0)
     const targetIndex = Math.min(baseIndex + column, modeConfig.size - 1)
-    focusPanelControl(`digit-${targetIndex + 1}`)
+    focusClosestAvailableDigit(targetIndex)
   }
 
   function moveKeypadFocus(currentIndex: number, direction: 'up' | 'down' | 'left' | 'right'): void {
@@ -435,12 +462,37 @@ function App() {
             : currentIndex + keypadColumns
 
     if (nextIndex >= 0 && nextIndex <= lastIndex) {
-      focusPanelControl(`digit-${nextIndex + 1}`)
+      focusClosestAvailableDigit(nextIndex)
     }
   }
 
   const currentValue =
     game?.selectedCell ? game.boardMatrix[game.selectedCell.row][game.selectedCell.col] : 0
+  const completedDigits = new Set<number>()
+
+  if (game) {
+    for (let digit = 1; digit <= modeConfig.size; digit += 1) {
+      let isDigitComplete = true
+
+      for (let row = 0; row < modeConfig.size; row += 1) {
+        for (let col = 0; col < modeConfig.size; col += 1) {
+          if (game.solutionMatrix[row][col] === digit && game.boardMatrix[row][col] !== digit) {
+            isDigitComplete = false
+            break
+          }
+        }
+
+        if (!isDigitComplete) {
+          break
+        }
+      }
+
+      if (isDigitComplete) {
+        completedDigits.add(digit)
+      }
+    }
+  }
+
   const canErase =
     !!game?.selectedCell && !isFixedCell(game.initialBoard, game.selectedCell.row, game.selectedCell.col)
   const isCompleted = Boolean(game?.completedAt)
@@ -448,6 +500,10 @@ function App() {
   const currentPuzzleIndex = gamePuzzles.findIndex((puzzle) => puzzle.id === game?.puzzleId)
   const currentPuzzleNumber = currentPuzzleIndex >= 0 ? currentPuzzleIndex + 1 : 1
   const currentPuzzleTotal = gamePuzzles.length
+  const keypadDigits = Array.from({ length: modeConfig.size }, (_, index) => ({
+    digit: index + 1,
+    isDigitComplete: completedDigits.has(index + 1),
+  }))
 
   useEffect(() => {
     if (screen !== 'game' || !pendingFocusRef.current) {
@@ -692,15 +748,16 @@ function App() {
                 className="keypad"
                 style={{ gridTemplateColumns: `repeat(${keypadColumns}, minmax(0, 1fr))` }}
               >
-                {Array.from({ length: modeConfig.size }, (_, index) => index + 1).map((digit, index) => (
+                {keypadDigits.map(({ digit, isDigitComplete }, index) => (
                   <button
                     key={digit}
                     ref={(node) => {
                       panelRefs.current[`digit-${digit}`] = node
                     }}
                     type="button"
-                    className={`digit-button ${currentValue === digit ? 'is-active' : ''}`}
+                    className={`digit-button ${currentValue === digit ? 'is-active' : ''} ${isDigitComplete ? 'is-complete' : ''}`}
                     onClick={() => writeValue(digit)}
+                    disabled={isDigitComplete}
                     onKeyDown={(event) => {
                       if (event.key === 'ArrowLeft') {
                         event.preventDefault()
@@ -798,8 +855,8 @@ function App() {
                 </button>
               </div>
 
-              <div className="panel-actions">
-                {isCompleted ? (
+              {isCompleted ? (
+                <div className="completed-action">
                   <button
                     ref={(node) => {
                       panelRefs.current['action-next'] = node
@@ -811,7 +868,7 @@ function App() {
                       if (event.key === 'ArrowUp') {
                         event.preventDefault()
                         focusPanelControl('tool-home')
-                      } else if (event.key === 'ArrowRight') {
+                      } else if (event.key === 'ArrowDown') {
                         event.preventDefault()
                         focusPanelControl('action-home')
                       }
@@ -819,7 +876,14 @@ function App() {
                   >
                     繼續遊戲
                   </button>
-                ) : null}
+                </div>
+              ) : null}
+
+              <div className="panel-actions">
+                <div className="action-stat" aria-live="polite">
+                  <strong>錯誤次數</strong>
+                  <span>{game.errorCount}</span>
+                </div>
 
                 <button
                   ref={(node) => {
@@ -832,9 +896,6 @@ function App() {
                     if (event.key === 'ArrowUp') {
                       event.preventDefault()
                       focusPanelControl(isCompleted ? 'action-next' : 'tool-home')
-                    } else if (event.key === 'ArrowLeft' && isCompleted) {
-                      event.preventDefault()
-                      focusPanelControl('action-next')
                     }
                   }}
                 >

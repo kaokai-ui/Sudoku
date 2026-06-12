@@ -37,6 +37,7 @@ export interface SavedGame {
   mode: ModeKey
   difficulty: DifficultyKey
   board: string
+  errorCount: number
   selectedCell: CellPosition | null
   startedAt: string
   updatedAt: string
