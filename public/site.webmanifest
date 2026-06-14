@@ -2,18 +2,20 @@
   "name": "數獨遊戲",
   "short_name": "Sudoku",
   "description": "可在 PC、iPad、Android Pad 與 Android TV 使用的數獨遊戲。",
-  "start_url": "/",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f3f4ef",
   "theme_color": "#4d72bf",
   "icons": [
     {
-      "src": "/icon-192.svg",
+      "src": "./icon-192.svg",
       "sizes": "192x192",
       "type": "image/svg+xml"
     },
     {
-      "src": "/icon-512.svg",
+      "src": "./icon-512.svg",
       "sizes": "512x512",
       "type": "image/svg+xml"
     }
