@@ -626,16 +626,16 @@ function App() {
             </div>
 
             <div className="action-panel__buttons">
-              <button type="button" className="primary-action" onClick={() => startNewGame()}>
-                開始新局
-              </button>
               <button
                 type="button"
-                className="secondary-action"
+                className="primary-action"
                 onClick={() => continueSavedGame()}
                 disabled={!savedForSelection}
               >
                 繼續遊戲
+              </button>
+              <button type="button" className="secondary-action" onClick={() => startNewGame()}>
+                開始新局
               </button>
             </div>
           </section>
